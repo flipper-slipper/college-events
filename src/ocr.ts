@@ -30,22 +30,24 @@ export async function processNewPosts(env: Env) {
             console.log(`[OCR] Image downloaded (${imageData.byteLength} bytes)`);
 
             // 2. Perform OCR / Extraction
-            console.log("[OCR] Sending to Cloudflare AI model (@cf/google/gemma-3-12b-it)...");
-            const prompt = `EXACT OCR TASK:
-1. Look at the image and the caption.
-2. Identify all unique events.
-3. For each event, extract:
-   - title: The EXACT event name.
-   - date: The date (e.g., "1/16/2026").
-   - time: The time (e.g., "7:00 PM") or "TBD" if not shown.
-   - about: A concise 1-sentence description.
+            console.log("[OCR] Sending to Cloudflare AI model (@cf/mistral/mistral-small-3.1-24b-instruct)...");
+            const prompt = `You are a high-precision OCR and Event Extraction agent. 
+Analyze the provided image and caption to extract ALL distinct events.
 
-Caption Context: "${post.caption}"
+TRANSCRIPTION RULES:
+- Find every instance of a date/time associated with a title.
+- Title: Extract the full, original name of the event.
+- Date: Format as MM/DD/YYYY. If year is missing, use 2026.
+- Time: Extract the specific start time. Use "TBD" if not found.
+- About: Provide a 1-sentence description. Use caption information if the image is sparse.
 
-Return ONLY a valid JSON array of objects. No intro text, no conversational filler.
-Example: [{"title": "Event Name", "date": "1/16/2026", "time": "TBD", "about": "..."}]`;
+CONTEXT (Instagram Caption): "${post.caption}"
 
-            const aiResponse: any = await env.AI.run("@cf/google/gemma-3-12b-it", {
+OUTPUT FORMAT:
+Return ONLY a valid JSON array of objects. No markdown, no filler.
+Example: [{"title": "...", "date": "...", "time": "...", "about": "..."}]`;
+
+            const aiResponse: any = await env.AI.run("@cf/mistral/mistral-small-3.1-24b-instruct", {
                 image: [...new Uint8Array(imageData)],
                 prompt: prompt,
             });
