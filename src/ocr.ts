@@ -8,7 +8,11 @@ export async function processNewPosts(env: Env) {
     for (const post of results as any[]) {
         try {
             console.log(`[OCR] Processing post ${post.id}...`);
-            // 1. Fetch the image
+
+            // 1. Immediately mark as processed to prevent concurrent runs
+            await env.DB.prepare("UPDATE posts SET processed = 1 WHERE id = ?").bind(post.id).run();
+
+            // 2. Fetch the image
             const imageResponse = await fetch(post.image_url);
             if (!imageResponse.ok) {
                 console.error(`[OCR] Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`);
@@ -22,7 +26,8 @@ export async function processNewPosts(env: Env) {
             const prompt = `Analyze this image and its caption to extract event details.
 Instagram Caption: "${post.caption}"
 
-Identify all events mentioned. For each event, extract the title, date, time, and a descriptive 'about' section. Use both the text in the image AND the caption for extra details or context. 
+Identify distinct events. If several titles refer to the same event (e.g. one in text, one in image), combine them into a single entry using the most descriptive title.
+For each event, extract the title, date, time, and a descriptive 'about' section.
 Return ONLY a JSON array of objects with keys: title, date, time, about. If no events are found, return [].`;
 
             const aiResponse: any = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf", {
@@ -37,6 +42,9 @@ Return ONLY a JSON array of objects with keys: title, date, time, about. If no e
             
             const eventsData = parseAIResponse(responseText);
             console.log("[OCR] Parsed JSON:", JSON.stringify(eventsData));
+
+            // Clean up any existing events for this post_id before inserting new ones
+            await env.DB.prepare("DELETE FROM events WHERE post_id = ?").bind(post.id).run();
 
             if (eventsData.length === 0) {
                 console.log(`[OCR] No events found in post ${post.id}`);
@@ -56,11 +64,10 @@ Return ONLY a JSON array of objects with keys: title, date, time, about. If no e
                 console.log(`[OCR] Saved ${eventsData.length} events for post ${post.id}`);
             }
 
-            // 4. Mark post as processed
-            await env.DB.prepare("UPDATE posts SET processed = 1 WHERE id = ?").bind(post.id).run();
-
         } catch (error) {
             console.error(`Error processing post ${post.id}:`, error);
+            // On error, we might want to unmark it as processed so it can be retried
+            await env.DB.prepare("UPDATE posts SET processed = 0 WHERE id = ?").bind(post.id).run();
         }
     }
 }
