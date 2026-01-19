@@ -1,0 +1,25 @@
+{
+  "name": "college-events",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flipper-slipper/college-events.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/flipper-slipper/college-events/issues"
+  },
+  "homepage": "https://github.com/flipper-slipper/college-events#readme",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260118.0",
+    "wrangler": "^4.59.2"
+  }
+}

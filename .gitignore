@@ -1,0 +1,16 @@
+# Node.js
+node_modules/
+dist/
+package-lock.json
+
+# Wrangler/Cloudflare
+.wrangler/
+.dev.vars
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

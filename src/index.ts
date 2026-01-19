@@ -4,6 +4,7 @@ import { processNewPosts } from "./ocr";
 export interface Env {
 	DB: D1Database;
 	AI: Ai;
+	APIFY_TOKEN: string;
 }
 
 export default {
@@ -14,6 +15,12 @@ export default {
 
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const url = new URL(request.url);
+
+		if (url.pathname === "/run-process") {
+			await scrapeInstagramPosts(env);
+			await processNewPosts(env);
+			return new Response("Success! Scrape and AI OCR complete.", { status: 200 });
+		}
 
 		if (url.pathname === "/api/events") {
 			const { results } = await env.DB.prepare("SELECT * FROM events ORDER BY event_date DESC").all();
@@ -35,6 +42,7 @@ export default {
 			</head>
 			<body>
 				<h1>Upcoming College Events</h1>
+				<button onclick="fetch('/run-process').then(() => location.reload())" style="margin-bottom: 20px; padding: 10px; background: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px;">🔄 Refresh/Scrape Now</button>
 				<div id="events-list">Loading events...</div>
 
 				<script>

@@ -1,10 +1,11 @@
 -- Table for raw scraped posts
 CREATE TABLE IF NOT EXISTS posts (
     id TEXT PRIMARY KEY,
-    instagram_id TEXT UNIQUE,
     image_url TEXT,
     caption TEXT,
-    processed BOOLEAN DEFAULT FALSE,
+    post_url TEXT,
+    timestamp TEXT,
+    processed BOOLEAN DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -16,7 +17,7 @@ CREATE TABLE IF NOT EXISTS events (
     description TEXT,
     event_date TEXT,
     event_time TEXT,
-    location TEXT,
+    post_url TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (post_id) REFERENCES posts(id)
 );

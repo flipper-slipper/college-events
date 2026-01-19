@@ -1,33 +1,35 @@
 import { Env } from "./index";
 
 export async function scrapeInstagramPosts(env: Env) {
-    // Example: Using an external API to get posts
-    // Replace with actual API endpoint and authentication
-    const API_ENDPOINT = "https://api.example.com/instagram/posts";
-    const API_KEY = "your-api-key";
+    const taskId = "conscious_veil~instagram-scraper-task";
+    const url = `https://api.apify.com/v2/actor-tasks/${taskId}/run-sync-get-dataset-items?token=${env.APIFY_TOKEN}`;
 
-    const response = await fetch(API_ENDPOINT, {
-        headers: {
-            "Authorization": `Bearer ${API_KEY}`
+    try {
+        console.log("Triggering Apify task...");
+        const response = await fetch(url, { method: "POST" });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Apify error (${response.status}): ${errorText}`);
         }
-    });
 
-    if (!response.ok) {
-        throw new Error(`Failed to fetch posts: ${response.statusText}`);
-    }
+        const items = await response.json() as any[];
+        console.log(`Successfully fetched ${items.length} items from Apify.`);
 
-    const data: any = await response.json();
-    const posts = data.posts; // Adjust based on API response structure
+        for (const item of items) {
+            const id = item.id || item.shortCode || (item.url ? item.url.split('/').filter(Boolean).pop() : crypto.randomUUID());
+            const imageUrl = item.displayUrl || (item.images && item.images[0]);
+            const caption = item.caption || "";
+            const postUrl = item.url;
+            const timestamp = item.timestamp;
 
-    for (const post of posts) {
-        // Insert into D1 if not exists
-        await env.DB.prepare(
-            "INSERT OR IGNORE INTO posts (id, instagram_id, image_url, caption) VALUES (?, ?, ?, ?)"
-        ).bind(
-            crypto.randomUUID(),
-            post.id,
-            post.image_url,
-            post.caption
-        ).run();
+            if (!id || !imageUrl) continue;
+
+            await env.DB.prepare(
+                "INSERT OR IGNORE INTO posts (id, image_url, caption, post_url, timestamp, processed) VALUES (?, ?, ?, ?, ?, 0)"
+            ).bind(id, imageUrl, caption, postUrl, timestamp).run();
+        }
+    } catch (error) {
+        console.error("Scraping failed:", error);
     }
 }

@@ -19,21 +19,28 @@ export async function processNewPosts(env: Env) {
             
             const aiResponse: any = await env.AI.run("@cf/minicpm-v-2_6-awq", {
                 image: [...new Uint8Array(imageData)],
-                prompt: "Extract the event date, time, and description from this image. Format as JSON with keys: date, time, about.",
+                prompt: "Extract the event date, time, and description from this image. Format as JSON with keys: date, time, about. If it's not an event, just return {about: 'Not an event'}",
             });
 
             // 3. Store the result in events table
             // In a real scenario, you'd parse aiResponse.text and extract JSON
-            const extractedData = parseAIResponse(aiResponse.description);
+            const responseText = aiResponse?.description || aiResponse?.text || JSON.stringify(aiResponse) || "";
+            const extractedData = parseAIResponse(responseText);
+
+            if (extractedData.about === 'Not an event') {
+                await env.DB.prepare("UPDATE posts SET processed = TRUE WHERE id = ?").bind(post.id).run();
+                continue;
+            }
 
             await env.DB.prepare(
-                "INSERT INTO events (post_id, title, description, event_date, event_time) VALUES (?, ?, ?, ?, ?)"
+                "INSERT INTO events (post_id, title, description, event_date, event_time, post_url) VALUES (?, ?, ?, ?, ?, ?)"
             ).bind(
                 post.id,
                 extractedData.title || "Untitled Event",
                 extractedData.about || post.caption,
                 extractedData.date || null,
-                extractedData.time || null
+                extractedData.time || null,
+                post.post_url
             ).run();
 
             // 4. Mark post as processed
