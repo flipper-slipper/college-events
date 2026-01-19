@@ -18,8 +18,8 @@ export async function processNewPosts(env: Env) {
             console.log(`[OCR] Image downloaded (${imageData.byteLength} bytes)`);
 
             // 2. Perform OCR / Extraction
-            console.log("[OCR] Sending to Cloudflare AI model (@cf/minicpm-v-2_6-awq)...");
-            const aiResponse: any = await env.AI.run("@cf/minicpm-v-2_6-awq", {
+            console.log("[OCR] Sending to Cloudflare AI model (@cf/meta/llama-3.2-11b-vision-instruct)...");
+            const aiResponse: any = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
                 image: [...new Uint8Array(imageData)],
                 prompt: "Analyze this image and extract event details. Format the output as JSON: { \"title\": \"...\", \"date\": \"...\", \"time\": \"...\", \"about\": \"...\" }. If no event is found, return { \"about\": \"Not an event\" }",
             });
@@ -58,13 +58,18 @@ export async function processNewPosts(env: Env) {
 }
 
 function parseAIResponse(text: string) {
-    // Simple parser or regex to extract info from AI response
-    // For now, returning a mock object
+    if (!text) return { title: "Extracted Event", about: "No text returned from AI", date: "", time: "" };
+    
+    // Clean up markdown code blocks if the AI includes them
+    const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    
     try {
-        const jsonMatch = text.match(/\{.*\}/s);
+        const jsonMatch = cleaned.match(/\{.*\}/s);
         if (jsonMatch) {
             return JSON.parse(jsonMatch[0]);
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error("Failed to parse AI JSON:", e, "Original text:", text);
+    }
     return { title: "Extracted Event", about: text, date: "", time: "" };
 }
