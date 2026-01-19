@@ -18,10 +18,10 @@ export async function processNewPosts(env: Env) {
             console.log(`[OCR] Image downloaded (${imageData.byteLength} bytes)`);
 
             // 2. Perform OCR / Extraction
-            console.log("[OCR] Sending to Cloudflare AI model (@cf/meta/llama-3.2-11b-vision-instruct)...");
-            const aiResponse: any = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
+            console.log("[OCR] Sending to Cloudflare AI model (@cf/llava-hf/llava-1.5-7b-hf)...");
+            const aiResponse: any = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf", {
                 image: [...new Uint8Array(imageData)],
-                prompt: "Analyze this image and extract event details. Format the output as JSON: { \"title\": \"...\", \"date\": \"...\", \"time\": \"...\", \"about\": \"...\" }. If no event is found, return { \"about\": \"Not an event\" }",
+                prompt: "Identify the event title, date, time, and a short description from this image. Return ONLY a JSON object with keys: title, date, time, about. If it's not an event, return { \"about\": \"Not an event\" }",
             });
 
             console.log("[OCR] Raw AI Object:", JSON.stringify(aiResponse));
