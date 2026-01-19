@@ -2,30 +2,35 @@ import { Env } from "./index";
 
 export async function processNewPosts(env: Env) {
     const { results } = await env.DB.prepare(
-        "SELECT * FROM posts WHERE processed = FALSE"
+        "SELECT * FROM posts WHERE processed = 0"
     ).all();
 
     for (const post of results as any[]) {
         try {
+            console.log(`[OCR] Processing post ${post.id}...`);
             // 1. Fetch the image
             const imageResponse = await fetch(post.image_url);
-            if (!imageResponse.ok) continue;
+            if (!imageResponse.ok) {
+                console.error(`[OCR] Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`);
+                continue;
+            }
             const imageData = await imageResponse.arrayBuffer();
+            console.log(`[OCR] Image downloaded (${imageData.byteLength} bytes)`);
 
-            // 2. Perform OCR / Extraction using AI Workers
-            // Note: Cloudflare AI Vision models vary. 
-            // Here we use a hypothetical model that can extract text.
-            // Documentation: https://developers.cloudflare.com/workers-ai/models/
-            
+            // 2. Perform OCR / Extraction
+            console.log("[OCR] Sending to Cloudflare AI model (@cf/minicpm-v-2_6-awq)...");
             const aiResponse: any = await env.AI.run("@cf/minicpm-v-2_6-awq", {
                 image: [...new Uint8Array(imageData)],
-                prompt: "Extract the event date, time, and description from this image. Format as JSON with keys: date, time, about. If it's not an event, just return {about: 'Not an event'}",
+                prompt: "Analyze this image and extract event details. Format the output as JSON: { \"title\": \"...\", \"date\": \"...\", \"time\": \"...\", \"about\": \"...\" }. If no event is found, return { \"about\": \"Not an event\" }",
             });
 
-            // 3. Store the result in events table
-            // In a real scenario, you'd parse aiResponse.text and extract JSON
-            const responseText = aiResponse?.description || aiResponse?.text || JSON.stringify(aiResponse) || "";
+            console.log("[OCR] Raw AI Object:", JSON.stringify(aiResponse));
+
+            const responseText = aiResponse?.description || aiResponse?.text || aiResponse?.result || "";
+            console.log(`[OCR] Extracted Text: "${responseText}"`);
+            
             const extractedData = parseAIResponse(responseText);
+            console.log("[OCR] Parsed JSON:", JSON.stringify(extractedData));
 
             if (extractedData.about === 'Not an event') {
                 await env.DB.prepare("UPDATE posts SET processed = TRUE WHERE id = ?").bind(post.id).run();
