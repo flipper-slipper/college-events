@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS posts (
     post_url TEXT,
     timestamp TEXT,
     processed BOOLEAN DEFAULT 0,
+    is_live BOOLEAN DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
