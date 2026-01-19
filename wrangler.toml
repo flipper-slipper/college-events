@@ -1,0 +1,11 @@
+name = "college-events"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[ai]
+binding = "AI"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "college_events_db"
+database_id = "your-database-id-here" # To be filled after creation
