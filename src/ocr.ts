@@ -43,13 +43,43 @@ Return ONLY a JSON array of objects with keys: title, date, time, about. If no e
             const eventsData = parseAIResponse(responseText);
             console.log("[OCR] Parsed JSON:", JSON.stringify(eventsData));
 
+            // Sanity Check: De-duplicate events from the SAME post that have the same time slot
+            const uniqueEvents: any[] = [];
+            const seenSlots = new Set<string>();
+
+            for (const event of eventsData) {
+                const date = (event.date || "").trim();
+                const time = (event.time || "").trim();
+                const slotKey = `${date}|${time}`;
+
+                if (seenSlots.has(slotKey) && date !== "" && time !== "") {
+                    console.log(`[OCR] Skipping duplicate event slot in same post: ${slotKey}`);
+                    // Optionally update the existing event if this one has a better description, 
+                    // but for now, we just take the first one found.
+                    continue;
+                }
+                seenSlots.add(slotKey);
+                uniqueEvents.push(event);
+            }
+
             // Clean up any existing events for this post_id before inserting new ones
             await env.DB.prepare("DELETE FROM events WHERE post_id = ?").bind(post.id).run();
 
-            if (eventsData.length === 0) {
-                console.log(`[OCR] No events found in post ${post.id}`);
+            if (uniqueEvents.length === 0) {
+                console.log(`[OCR] No unique events found in post ${post.id}`);
             } else {
-                for (const eventData of eventsData) {
+                for (const eventData of uniqueEvents) {
+                    // Final safety: check if an event with this title & date already exists from ANY post 
+                    // to prevent duplicates across different posts (e.g. a reminder post)
+                    const existing = await env.DB.prepare(
+                        "SELECT id FROM events WHERE title = ? AND event_date = ?"
+                    ).bind(eventData.title, eventData.date).first();
+
+                    if (existing) {
+                        console.log(`[OCR] Skipping duplicate event from different post: ${eventData.title} on ${eventData.date}`);
+                        continue;
+                    }
+
                     await env.DB.prepare(
                         "INSERT INTO events (post_id, title, description, event_date, event_time, post_url) VALUES (?, ?, ?, ?, ?, ?)"
                     ).bind(
@@ -61,7 +91,7 @@ Return ONLY a JSON array of objects with keys: title, date, time, about. If no e
                         post.post_url
                     ).run();
                 }
-                console.log(`[OCR] Saved ${eventsData.length} events for post ${post.id}`);
+                console.log(`[OCR] Saved ${uniqueEvents.length} events for post ${post.id}`);
             }
 
         } catch (error) {
