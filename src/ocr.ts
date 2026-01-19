@@ -19,9 +19,15 @@ export async function processNewPosts(env: Env) {
 
             // 2. Perform OCR / Extraction
             console.log("[OCR] Sending to Cloudflare AI model (@cf/llava-hf/llava-1.5-7b-hf)...");
+            const prompt = `Analyze this image and its caption to extract event details.
+Instagram Caption: "${post.caption}"
+
+Identify all events mentioned. For each event, extract the title, date, time, and a descriptive 'about' section. Use both the text in the image AND the caption for extra details or context. 
+Return ONLY a JSON array of objects with keys: title, date, time, about. If no events are found, return [].`;
+
             const aiResponse: any = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf", {
                 image: [...new Uint8Array(imageData)],
-                prompt: "Identify the event title, date, time, and a short description from this image. Return ONLY a JSON object with keys: title, date, time, about. If it's not an event, return { \"about\": \"Not an event\" }",
+                prompt: prompt,
             });
 
             console.log("[OCR] Raw AI Object:", JSON.stringify(aiResponse));
@@ -29,27 +35,29 @@ export async function processNewPosts(env: Env) {
             const responseText = aiResponse?.description || aiResponse?.text || aiResponse?.result || "";
             console.log(`[OCR] Extracted Text: "${responseText}"`);
             
-            const extractedData = parseAIResponse(responseText);
-            console.log("[OCR] Parsed JSON:", JSON.stringify(extractedData));
+            const eventsData = parseAIResponse(responseText);
+            console.log("[OCR] Parsed JSON:", JSON.stringify(eventsData));
 
-            if (extractedData.about === 'Not an event') {
-                await env.DB.prepare("UPDATE posts SET processed = TRUE WHERE id = ?").bind(post.id).run();
-                continue;
+            if (eventsData.length === 0) {
+                console.log(`[OCR] No events found in post ${post.id}`);
+            } else {
+                for (const eventData of eventsData) {
+                    await env.DB.prepare(
+                        "INSERT INTO events (post_id, title, description, event_date, event_time, post_url) VALUES (?, ?, ?, ?, ?, ?)"
+                    ).bind(
+                        post.id,
+                        eventData.title || "Untitled Event",
+                        eventData.about || post.caption,
+                        eventData.date || null,
+                        eventData.time || null,
+                        post.post_url
+                    ).run();
+                }
+                console.log(`[OCR] Saved ${eventsData.length} events for post ${post.id}`);
             }
 
-            await env.DB.prepare(
-                "INSERT INTO events (post_id, title, description, event_date, event_time, post_url) VALUES (?, ?, ?, ?, ?, ?)"
-            ).bind(
-                post.id,
-                extractedData.title || "Untitled Event",
-                extractedData.about || post.caption,
-                extractedData.date || null,
-                extractedData.time || null,
-                post.post_url
-            ).run();
-
             // 4. Mark post as processed
-            await env.DB.prepare("UPDATE posts SET processed = TRUE WHERE id = ?").bind(post.id).run();
+            await env.DB.prepare("UPDATE posts SET processed = 1 WHERE id = ?").bind(post.id).run();
 
         } catch (error) {
             console.error(`Error processing post ${post.id}:`, error);
@@ -57,19 +65,26 @@ export async function processNewPosts(env: Env) {
     }
 }
 
-function parseAIResponse(text: string) {
-    if (!text) return { title: "Extracted Event", about: "No text returned from AI", date: "", time: "" };
+function parseAIResponse(text: string): any[] {
+    if (!text) return [];
     
     // Clean up markdown code blocks if the AI includes them
     const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
     
     try {
-        const jsonMatch = cleaned.match(/\{.*\}/s);
-        if (jsonMatch) {
-            return JSON.parse(jsonMatch[0]);
+        // Find everything between [ ] or { }
+        const arrayMatch = cleaned.match(/\[.*\]/s);
+        if (arrayMatch) {
+            return JSON.parse(arrayMatch[0]);
+        }
+        
+        const objectMatch = cleaned.match(/\{.*\}/s);
+        if (objectMatch) {
+            const obj = JSON.parse(objectMatch[0]);
+            return (obj.about === "Not an event" || obj.title === "Not an event") ? [] : [obj];
         }
     } catch (e) {
         console.error("Failed to parse AI JSON:", e, "Original text:", text);
     }
-    return { title: "Extracted Event", about: text, date: "", time: "" };
+    return [];
 }
