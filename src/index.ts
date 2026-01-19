@@ -71,20 +71,24 @@ export default {
 						`).join('')}
 					</div>
 
+					<div style="margin-top: 50px; border-top: 1px solid #ccc; padding-top: 20px;">
+						<p>Admin Tools:</p>
+						<button onclick="if(confirm('Clear all events and re-process posts?')) fetch('/reset').then(() => location.reload())">Reset All Data</button>
+					</div>
+
 					<script>
 						async function runProcess() {
 							const btn = document.getElementById('refreshBtn');
 							const msg = document.getElementById('statusMsg');
 							btn.disabled = true;
-							msg.innerText = 'Scraping and running AI... This may time out in the browser but will continue in the background. Refresh in 1-2 minutes.';
+							msg.innerText = 'Triggering Scraper and OCR... This takes about 10-20 seconds per post. Please check your terminal for logs!';
 							
 							try {
 								await fetch('/run-process');
 								location.reload();
 							} catch (e) {
 								console.error(e);
-								// Errors are likely timeouts, but the worker usually finishes the CPU work
-								msg.innerText = 'The request is taking a while. Please wait a minute and refresh manually.';
+								msg.innerText = 'The request timed out or failed, but logs in the terminal might still be active.';
 							}
 						}
 					</script>

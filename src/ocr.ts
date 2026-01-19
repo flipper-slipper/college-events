@@ -1,9 +1,17 @@
 import { Env } from "./index";
 
 export async function processNewPosts(env: Env) {
+    console.log("[OCR] Checking for new unprocessed posts...");
     const { results } = await env.DB.prepare(
         "SELECT * FROM posts WHERE processed = 0"
     ).all();
+
+    if (!results || results.length === 0) {
+        console.log("[OCR] No new posts to process.");
+        return;
+    }
+
+    console.log(`[OCR] Found ${results.length} posts to process.`);
 
     for (const post of results as any[]) {
         try {
@@ -23,12 +31,12 @@ export async function processNewPosts(env: Env) {
 
             // 2. Perform OCR / Extraction
             console.log("[OCR] Sending to Cloudflare AI model (@cf/llava-hf/llava-1.5-7b-hf)...");
-            const prompt = `Analyze this image and its caption to extract event details.
-Instagram Caption: "${post.caption}"
+            const prompt = `Analyze this image and its caption for events.
+Caption: "${post.caption}"
 
-Identify distinct events. If several titles refer to the same event (e.g. one in text, one in image), combine them into a single entry using the most descriptive title.
-For each event, extract the title, date, time, and a descriptive 'about' section.
-Return ONLY a JSON array of objects with keys: title, date, time, about. If no events are found, return [].`;
+Extract ALL unique events. For each, give: title, date, time, about.
+BE CONCISE. Do not repeat events. 
+Return ONLY a valid JSON array of objects. Example: [{"title": "...", "date": "...", "time": "...", "about": "..."}]`;
 
             const aiResponse: any = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf", {
                 image: [...new Uint8Array(imageData)],
@@ -106,8 +114,19 @@ function parseAIResponse(text: string): any[] {
     if (!text) return [];
     
     // Clean up markdown code blocks if the AI includes them
-    const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    let cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
     
+    // HEURISTIC: If the JSON is truncated (common with LLMs), try to close it
+    if (cleaned.startsWith('[') && !cleaned.endsWith(']')) {
+        // Try to find the last complete object
+        const lastCurly = cleaned.lastIndexOf('}');
+        if (lastCurly !== -1) {
+            cleaned = cleaned.substring(0, lastCurly + 1) + ']';
+        } else {
+            cleaned = cleaned + ']';
+        }
+    }
+
     try {
         // Find everything between [ ] or { }
         const arrayMatch = cleaned.match(/\[.*\]/s);
@@ -121,7 +140,7 @@ function parseAIResponse(text: string): any[] {
             return (obj.about === "Not an event" || obj.title === "Not an event") ? [] : [obj];
         }
     } catch (e) {
-        console.error("Failed to parse AI JSON:", e, "Original text:", text);
+        console.error("Failed to parse AI JSON:", e, "Cleaned text:", cleaned);
     }
     return [];
 }
