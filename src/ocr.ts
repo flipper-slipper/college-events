@@ -30,15 +30,22 @@ export async function processNewPosts(env: Env) {
             console.log(`[OCR] Image downloaded (${imageData.byteLength} bytes)`);
 
             // 2. Perform OCR / Extraction
-            console.log("[OCR] Sending to Cloudflare AI model (@cf/llava-hf/llava-1.5-7b-hf)...");
-            const prompt = `Analyze this image and its caption for events.
-Caption: "${post.caption}"
+            console.log("[OCR] Sending to Cloudflare AI model (@cf/google/gemma-3-12b-it)...");
+            const prompt = `EXACT OCR TASK:
+1. Look at the image and the caption.
+2. Identify all unique events.
+3. For each event, extract:
+   - title: The EXACT event name.
+   - date: The date (e.g., "1/16/2026").
+   - time: The time (e.g., "7:00 PM") or "TBD" if not shown.
+   - about: A concise 1-sentence description.
 
-Extract ALL unique events. For each, give: title, date, time, about.
-BE CONCISE. Do not repeat events. 
-Return ONLY a valid JSON array of objects. Example: [{"title": "...", "date": "...", "time": "...", "about": "..."}]`;
+Caption Context: "${post.caption}"
 
-            const aiResponse: any = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf", {
+Return ONLY a valid JSON array of objects. No intro text, no conversational filler.
+Example: [{"title": "Event Name", "date": "1/16/2026", "time": "TBD", "about": "..."}]`;
+
+            const aiResponse: any = await env.AI.run("@cf/google/gemma-3-12b-it", {
                 image: [...new Uint8Array(imageData)],
                 prompt: prompt,
             });
