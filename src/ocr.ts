@@ -52,7 +52,7 @@ Example: [{"title": "Event Name", "date": "1/16/2026", "time": "TBD", "about": "
 
             console.log("[OCR] Raw AI Object:", JSON.stringify(aiResponse));
 
-            const responseText = aiResponse?.description || aiResponse?.text || aiResponse?.result || "";
+            const responseText = aiResponse?.response || aiResponse?.description || aiResponse?.text || aiResponse?.result || "";
             console.log(`[OCR] Extracted Text: "${responseText}"`);
             
             const eventsData = parseAIResponse(responseText);
@@ -120,34 +120,28 @@ Example: [{"title": "Event Name", "date": "1/16/2026", "time": "TBD", "about": "
 function parseAIResponse(text: string): any[] {
     if (!text) return [];
     
-    // Clean up markdown code blocks if the AI includes them
+    // 1. Remove markdown code block markers
     let cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
     
-    // HEURISTIC: If the JSON is truncated (common with LLMs), try to close it
-    if (cleaned.startsWith('[') && !cleaned.endsWith(']')) {
-        // Try to find the last complete object
+    // 2. Extract ONLY the bracketed array part [ ... ]
+    const arrayStart = cleaned.indexOf('[');
+    const arrayEnd = cleaned.lastIndexOf(']');
+    
+    if (arrayStart !== -1 && arrayEnd !== -1) {
+        cleaned = cleaned.substring(arrayStart, arrayEnd + 1);
+    } else if (arrayStart !== -1) {
+        // Truncated JSON - try to close it
+        cleaned = cleaned.substring(arrayStart) + ']';
         const lastCurly = cleaned.lastIndexOf('}');
         if (lastCurly !== -1) {
             cleaned = cleaned.substring(0, lastCurly + 1) + ']';
-        } else {
-            cleaned = cleaned + ']';
         }
     }
 
     try {
-        // Find everything between [ ] or { }
-        const arrayMatch = cleaned.match(/\[.*\]/s);
-        if (arrayMatch) {
-            return JSON.parse(arrayMatch[0]);
-        }
-        
-        const objectMatch = cleaned.match(/\{.*\}/s);
-        if (objectMatch) {
-            const obj = JSON.parse(objectMatch[0]);
-            return (obj.about === "Not an event" || obj.title === "Not an event") ? [] : [obj];
-        }
+        return JSON.parse(cleaned);
     } catch (e) {
-        console.error("Failed to parse AI JSON:", e, "Cleaned text:", cleaned);
+        console.error("Failed to parse AI JSON:", e, "Final string:", cleaned);
+        return [];
     }
-    return [];
 }
