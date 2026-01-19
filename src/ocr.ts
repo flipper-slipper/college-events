@@ -30,7 +30,7 @@ export async function processNewPosts(env: Env) {
             console.log(`[OCR] Image downloaded (${imageData.byteLength} bytes)`);
 
             // 2. Perform OCR / Extraction
-            console.log("[OCR] Sending to Cloudflare AI model (@cf/llava-hf/llava-1.5-7b-hf)...");
+            console.log("[OCR] Sending to Cloudflare AI model (@cf/openai/gpt-oss-120b)...");
             const prompt = `EXHAUSTIVE OCR TASK:
 Scan this image for a list of events. Extract EVERY SINGLE event found. 
 Do not summarize. Do not skip any rows.
@@ -44,14 +44,34 @@ For each event:
 Return ONLY a valid JSON array of objects.
 Example: [{"title": "...", "date": "...", "time": "...", "about": "..."}]`;
 
-            const aiResponse: any = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf", {
-                image: [...new Uint8Array(imageData)],
-                prompt: prompt,
+            // Convert image to base64 for the Responses API format
+            const imageBase64 = btoa(new Uint8Array(imageData).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+
+            const aiResponse: any = await env.AI.run("@cf/openai/gpt-oss-120b", {
+                input: [
+                    {
+                        role: "user",
+                        content: [
+                            { type: "text", text: prompt },
+                            { 
+                                type: "image_url", 
+                                image_url: { 
+                                    url: `data:image/jpeg;base64,${imageBase64}` 
+                                } 
+                            }
+                        ]
+                    }
+                ]
             });
 
             console.log("[OCR] Raw AI Object:", JSON.stringify(aiResponse));
 
-            const responseText = aiResponse?.response || aiResponse?.description || aiResponse?.text || aiResponse?.result || "";
+            const responseText = aiResponse?.response 
+                || aiResponse?.description 
+                || aiResponse?.text 
+                || aiResponse?.result 
+                || aiResponse?.choices?.[0]?.message?.content 
+                || "";
             console.log(`[OCR] Extracted Text: "${responseText}"`);
             
             const eventsData = parseAIResponse(responseText);
