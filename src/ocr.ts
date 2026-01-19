@@ -30,24 +30,21 @@ export async function processNewPosts(env: Env) {
             console.log(`[OCR] Image downloaded (${imageData.byteLength} bytes)`);
 
             // 2. Perform OCR / Extraction
-            console.log("[OCR] Sending to Cloudflare AI model (@cf/mistral/mistral-small-3.1-24b-instruct)...");
-            const prompt = `You are a high-precision OCR and Event Extraction agent. 
-Analyze the provided image and caption to extract ALL distinct events.
+            console.log("[OCR] Sending to Cloudflare AI model (@cf/llava-hf/llava-1.5-7b-hf)...");
+            const prompt = `EXHAUSTIVE OCR TASK:
+Scan this image for a list of events. Extract EVERY SINGLE event found. 
+Do not summarize. Do not skip any rows.
 
-TRANSCRIPTION RULES:
-- Find every instance of a date/time associated with a title.
-- Title: Extract the full, original name of the event.
-- Date: Format as MM/DD/YYYY. If year is missing, use 2026.
-- Time: Extract the specific start time. Use "TBD" if not found.
-- About: Provide a 1-sentence description. Use caption information if the image is sparse.
+For each event:
+- title: The full name of the event.
+- date: The date (e.g., "1/16/2026"). 
+- time: The time or "TBD".
+- about: One sentence based on the caption: "${post.caption}"
 
-CONTEXT (Instagram Caption): "${post.caption}"
-
-OUTPUT FORMAT:
-Return ONLY a valid JSON array of objects. No markdown, no filler.
+Return ONLY a valid JSON array of objects.
 Example: [{"title": "...", "date": "...", "time": "...", "about": "..."}]`;
 
-            const aiResponse: any = await env.AI.run("@cf/mistral/mistral-small-3.1-24b-instruct", {
+            const aiResponse: any = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf", {
                 image: [...new Uint8Array(imageData)],
                 prompt: prompt,
             });
